@@ -2,7 +2,7 @@ import { connect } from 'cloudflare:sockets';
 
 // --- 硬编码配置 ---
 // UUID，同时用作订阅路径。
-const authToken = 'b275ca14-273f-46c3-8aac-53a9f12f8915';
+const authToken = '351c9981-04b6-4103-aa4b-864aa9c91469';
 // 用来访问cloudflare托管的网站
 const fallbackAddress = 'ProxyIP.cmliussss.net';
 const fallbackPort = '443';

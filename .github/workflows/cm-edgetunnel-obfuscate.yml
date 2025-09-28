@@ -6,7 +6,7 @@ on:
       - main
   schedule:
         # Runs everyday at 1:00 AM
-        - cron: "0 2 * * *"
+        - cron: "0 1 * * *"
 
 permissions:
   contents: write
@@ -30,11 +30,11 @@ jobs:
 
       - name: Clone BPB workjs
         run: |
-          wget -O cm_edgetunnelorigin.js https://github.com/bonysope/cmedgetunnel/raw/refs/heads/main/_worker.js
+          wget -O cm5edgetunnelorigin.js https://github.com/bonysope/cmedgetunnel/raw/refs/heads/main/_worker.js
       
       - name: Obfuscate BPB worker js
         run: |
-          javascript-obfuscator cm_edgetunnelorigin.js --output cm_edgetunnel_worker.js \
+          javascript-obfuscator cm5edgetunnelorigin.js --output cm5edgetunnel_worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \

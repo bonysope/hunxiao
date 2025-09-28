@@ -30,11 +30,11 @@ jobs:
 
       - name: Clone BPB workjs
         run: |
-          wget -O cm-edgetunnel-origin.js https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js
+          wget -O cmedgetunnelorigin.js https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js
       
       - name: Obfuscate BPB worker js
         run: |
-          javascript-obfuscator cm-edgetunnel-origin.js --output cm-edgetunnel_worker.js \
+          javascript-obfuscator cmedgetunnelorigin.js --output cmedgetunnel_worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \

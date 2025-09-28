@@ -1,4 +1,4 @@
-//﻿https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js
+
 import { connect } from 'cloudflare:sockets';
 
 let userID = '';
@@ -7177,4 +7177,5 @@ function config_Html(token = "test", proxyhost = "") {
     return html;
 
 }
+
 

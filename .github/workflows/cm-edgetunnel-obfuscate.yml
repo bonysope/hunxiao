@@ -34,7 +34,7 @@ jobs:
       
       - name: Obfuscate BPB worker js
         run: |
-          javascript-obfuscator origin.js --output cm-edgetunnel_worker.js \
+          javascript-obfuscator cm-edgetunnel-origin.js --output cm-edgetunnel_worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \

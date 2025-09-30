@@ -28,11 +28,11 @@ jobs:
         run: |
           npm install -g javascript-obfuscator
 
-      - name: Clone joy workjs
+      - name: Clone BPB workjs
         run: |
-          wget -O joyorigin.js https://github.com/byJoey/cfnew/raw/refs/heads/main/%E6%98%8E%E6%96%87%E6%BA%90%E5%90%97
+          wget -O joyorigin.js https://github.com/bia-pain-bache/BPB-Worker-Panel/releases/download/v3.5.5/worker.js
       
-      - name: Obfuscate joy worker js
+      - name: Obfuscate BPB worker js
         run: |
           javascript-obfuscator joyorigin.js --output joy_worker.js \
           --compact true \

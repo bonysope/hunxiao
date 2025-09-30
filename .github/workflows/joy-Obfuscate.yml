@@ -1,4 +1,4 @@
-name: Build Obfuscate joy
+name: Build Obfuscate joy cfnew
 
 on:
   push:

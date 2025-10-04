@@ -1,9 +1,14 @@
 import { connect } from 'cloudflare:sockets';
 
 let authToken = '351c9981-04b6-4103-aa4b-864aa9c91469';
-let fallbackAddress = 'bpb.yousef.isegaro.com';
+let fallbackAddress = 'ProxyIP.SG.CMLiussss.net';
 let fallbackPort = '443';
 let socks5Config = '';
+let customPreferredIPs = [];
+let customPreferredDomains = [];
+let enableSocksDowngrade = false;
+let disablePort80 = false;
+let disablePreferred = false;
 
 const directDomains = [
     { name: "cloudflare.182682.xyz", domain: "cloudflare.182682.xyz" }, { name: "speed.marisalnc.com", domain: "speed.marisalnc.com" },
@@ -40,6 +45,44 @@ function isValidFormat(str) {
     return userRegex.test(str);
 }
 
+function isValidIP(ip) {
+    const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (ipv4Regex.test(ip)) return true;
+    
+    const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+    if (ipv6Regex.test(ip)) return true;
+    
+    const ipv6ShortRegex = /^::1$|^::$|^(?:[0-9a-fA-F]{1,4}:)*::(?:[0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$/;
+    if (ipv6ShortRegex.test(ip)) return true;
+    
+    return false;
+}
+
+function parseAddressAndPort(input) {
+    if (input.includes('[') && input.includes(']')) {
+        const match = input.match(/^\[([^\]]+)\](?::(\d+))?$/);
+        if (match) {
+            return {
+                address: match[1],
+                port: match[2] ? parseInt(match[2], 10) : null
+            };
+        }
+    }
+    
+    const lastColonIndex = input.lastIndexOf(':');
+    if (lastColonIndex > 0) {
+        const address = input.substring(0, lastColonIndex);
+        const portStr = input.substring(lastColonIndex + 1);
+        const port = parseInt(portStr, 10);
+        
+        if (!isNaN(port) && port > 0 && port <= 65535) {
+            return { address, port };
+        }
+    }
+    
+    return { address: input, port: null };
+}
+
 export default {
 	async fetch(request, env, ctx) {
 		try {
@@ -64,12 +107,56 @@ export default {
 			socks5Config = env.s || env.S || socks5Config;
 			if (socks5Config) {
 				try {
-					parsedSocks5Config = parseSocksConfig(socks5Config.toLowerCase());
+					parsedSocks5Config = parseSocksConfig(socks5Config);
 					isSocksEnabled = true;
 				} catch (err) {
-					console.log(`Invalid SOCKS5 config: ${err.toString()}`);
 					isSocksEnabled = false;
 				}
+			}
+
+			const customPreferred = env.yx || env.YX;
+			if (customPreferred) {
+				try {
+					const preferredList = customPreferred.split(',').map(item => item.trim()).filter(item => item);
+					customPreferredIPs = [];
+					customPreferredDomains = [];
+					
+					preferredList.forEach(item => {
+						const { address, port } = parseAddressAndPort(item);
+						
+						if (isValidIP(address)) {
+							customPreferredIPs.push({ 
+								ip: address, 
+								port: port,
+								isp: `自定义优选-${address}${port ? ':' + port : ''}` 
+							});
+						} else {
+							customPreferredDomains.push({ 
+								domain: address, 
+								port: port,
+								name: `自定义优选-${address}${port ? ':' + port : ''}` 
+							});
+						}
+					});
+				} catch (err) {
+					customPreferredIPs = [];
+					customPreferredDomains = [];
+				}
+			}
+
+			const downgradeControl = env.qj || env.QJ;
+			if (downgradeControl && downgradeControl.toLowerCase() === 'no') {
+				enableSocksDowngrade = true;
+			}
+
+			const dkbyControl = env.dkby || env.DKBY;
+			if (dkbyControl && dkbyControl.toLowerCase() === 'yes') {
+				disablePort80 = true;
+			}
+
+			const yxbyControl = env.yxby || env.YXBY;
+			if (yxbyControl && yxbyControl.toLowerCase() === 'yes') {
+				disablePreferred = true;
 			}
 
 			const url = new URL(request.url);
@@ -407,17 +494,32 @@ async function handleSubscriptionRequest(request, user, url = null) {
     const nativeList = [{ ip: workerDomain, isp: '原生地址' }];
     finalLinks.push(...generateLinksFromSource(nativeList, user, workerDomain));
 
-    const domainList = directDomains.map(d => ({ ip: d.domain, isp: d.name || d.domain }));
-    finalLinks.push(...generateLinksFromSource(domainList, user, workerDomain));
+    const hasCustomPreferred = customPreferredIPs.length > 0 || customPreferredDomains.length > 0;
+    
+    if (disablePreferred) {
+        // 如果禁用优选，只使用原生地址，不再添加其他节点
+    } else if (hasCustomPreferred) {
+        if (customPreferredIPs.length > 0) {
+            finalLinks.push(...generateLinksFromSource(customPreferredIPs, user, workerDomain));
+        }
+        
+        if (customPreferredDomains.length > 0) {
+            const customDomainList = customPreferredDomains.map(d => ({ ip: d.domain, isp: d.name || d.domain }));
+            finalLinks.push(...generateLinksFromSource(customDomainList, user, workerDomain));
+        }
+    } else {
+        const domainList = directDomains.map(d => ({ ip: d.domain, isp: d.name || d.domain }));
+        finalLinks.push(...generateLinksFromSource(domainList, user, workerDomain));
 
-    const dynamicIPList = await fetchDynamicIPs();
-    if (dynamicIPList.length > 0) {
-        finalLinks.push(...generateLinksFromSource(dynamicIPList, user, workerDomain));
-    }
+        const dynamicIPList = await fetchDynamicIPs();
+        if (dynamicIPList.length > 0) {
+            finalLinks.push(...generateLinksFromSource(dynamicIPList, user, workerDomain));
+        }
 
-    const newIPList = await fetchAndParseNewIPs();
-    if (newIPList.length > 0) {
-        finalLinks.push(...generateLinksFromNewIPs(newIPList, user, workerDomain));
+        const newIPList = await fetchAndParseNewIPs();
+        if (newIPList.length > 0) {
+            finalLinks.push(...generateLinksFromNewIPs(newIPList, user, workerDomain));
+        }
     }
 
     if (finalLinks.length === 0) {
@@ -468,8 +570,8 @@ async function handleSubscriptionRequest(request, user, url = null) {
 }
 
 function generateLinksFromSource(list, user, workerDomain) {
-    const httpsPorts = [443];
-    const httpPorts = [80];
+    const defaultHttpsPorts = [443];
+    const defaultHttpPorts = disablePort80 ? [] : [80];
     const links = [];
     const wsPath = encodeURIComponent('/?ed=2048');
     const proto = atob('dmxlc3M=');
@@ -477,6 +579,15 @@ function generateLinksFromSource(list, user, workerDomain) {
     list.forEach(item => {
         const nodeNameBase = item.isp.replace(/\s/g, '_');
         const safeIP = item.ip.includes(':') ? `[${item.ip}]` : item.ip;
+        
+        let httpsPorts, httpPorts;
+        if (item.port) {
+            httpsPorts = [item.port];
+            httpPorts = disablePort80 && item.port === 80 ? [] : [item.port];
+        } else {
+            httpsPorts = defaultHttpsPorts;
+            httpPorts = defaultHttpPorts;
+        }
 
         httpsPorts.forEach(port => {
             const wsNodeName = `${nodeNameBase}-${port}-WS-TLS`;
@@ -521,7 +632,6 @@ async function fetchDynamicIPs() {
         ]);
         results = [...ipv4List, ...ipv6List];
         if (results.length > 0) {
-            console.log(`Successfully fetched ${results.length} IPs from wetest.vip`);
             return results;
         }
     } catch (e) {
@@ -598,14 +708,14 @@ async function handleWsRequest(request) {
             if (isDnsQuery) return forwardUDP(rawData, serverSock, respHeader);
             await forwardTCP(addressType, hostname, port, rawData, serverSock, respHeader, remoteConnWrapper);
         },
-    })).catch((err) => { console.log('WS Stream Error:', err); });
+    })).catch((err) => { });
 
     return new Response(null, { status: 101, webSocket: clientSock });
 }
 
 async function forwardTCP(addrType, host, portNum, rawData, ws, respHeader, remoteConnWrapper) {
-    async function connectAndSend(address, port) {
-        const remoteSock = isSocksEnabled ?
+    async function connectAndSend(address, port, useSocks = false) {
+        const remoteSock = useSocks ?
             await establishSocksConnection(addrType, address, port) :
             connect({ hostname: address, port: port });
         const writer = remoteSock.writable.getWriter();
@@ -613,20 +723,42 @@ async function forwardTCP(addrType, host, portNum, rawData, ws, respHeader, remo
         writer.releaseLock();
         return remoteSock;
     }
+    
     async function retryConnection() {
-        const newSocket = isSocksEnabled ?
-            await connectAndSend(host, portNum) :
-            await connectAndSend(fallbackAddress || host, parseInt(fallbackPort, 10) || portNum);
-        remoteConnWrapper.socket = newSocket;
-        newSocket.closed.catch(() => {}).finally(() => closeSocketQuietly(ws));
-        connectStreams(newSocket, ws, respHeader, null);
+        if (enableSocksDowngrade && isSocksEnabled) {
+            try {
+                const socksSocket = await connectAndSend(host, portNum, true);
+                remoteConnWrapper.socket = socksSocket;
+                socksSocket.closed.catch(() => {}).finally(() => closeSocketQuietly(ws));
+                connectStreams(socksSocket, ws, respHeader, null);
+                return;
+            } catch (socksErr) {
+                try {
+                    const fallbackSocket = await connectAndSend(fallbackAddress || host, parseInt(fallbackPort, 10) || portNum, false);
+                    remoteConnWrapper.socket = fallbackSocket;
+                    fallbackSocket.closed.catch(() => {}).finally(() => closeSocketQuietly(ws));
+                    connectStreams(fallbackSocket, ws, respHeader, null);
+                } catch (fallbackErr) {
+                    closeSocketQuietly(ws);
+                }
+            }
+        } else {
+            try {
+                const fallbackSocket = await connectAndSend(fallbackAddress || host, parseInt(fallbackPort, 10) || portNum, isSocksEnabled);
+                remoteConnWrapper.socket = fallbackSocket;
+                fallbackSocket.closed.catch(() => {}).finally(() => closeSocketQuietly(ws));
+                connectStreams(fallbackSocket, ws, respHeader, null);
+            } catch (fallbackErr) {
+                closeSocketQuietly(ws);
+            }
+        }
     }
+    
     try {
-        const initialSocket = await connectAndSend(host, portNum);
+        const initialSocket = await connectAndSend(host, portNum, enableSocksDowngrade ? false : isSocksEnabled);
         remoteConnWrapper.socket = initialSocket;
         connectStreams(initialSocket, ws, respHeader, retryConnection);
     } catch (err) {
-        console.log('Initial connection failed, trying fallback:', err);
         retryConnection();
     }
 }
@@ -732,10 +864,22 @@ async function establishSocksConnection(addrType, address, port) {
 }
 
 function parseSocksConfig(address) {
-	let [latter, former] = address.split("@").reverse(); let username, password, hostname, socksPort;
-	if (former) { const formers = former.split(":"); if (formers.length !== 2) throw new Error(E_INVALID_SOCKS_ADDR);[username, password] = formers; }
-	const latters = latter.split(":"); socksPort = Number(latters.pop()); if (isNaN(socksPort)) throw new Error(E_INVALID_SOCKS_ADDR);
-	hostname = latters.join(":"); if (hostname.includes(":") && !/^\[.*\]$/.test(hostname)) throw new Error(E_INVALID_SOCKS_ADDR);
+	let [latter, former] = address.split("@").reverse(); 
+	let username, password, hostname, socksPort;
+	
+	if (former) { 
+		const formers = former.split(":"); 
+		if (formers.length !== 2) throw new Error(E_INVALID_SOCKS_ADDR);
+		[username, password] = formers; 
+	}
+	
+	const latters = latter.split(":"); 
+	socksPort = Number(latters.pop()); 
+	if (isNaN(socksPort)) throw new Error(E_INVALID_SOCKS_ADDR);
+	
+	hostname = latters.join(":"); 
+	if (hostname.includes(":") && !/^\[.*\]$/.test(hostname)) throw new Error(E_INVALID_SOCKS_ADDR);
+	
 	return { username, password, hostname, socksPort };
 }
 
@@ -957,7 +1101,7 @@ async function handleSubscriptionPage(request, user = null) {
     <div class="matrix-bg"></div>
     <div class="matrix-rain"></div>
     <div class="matrix-code-rain" id="matrixCodeRain"></div>
-    <div class="matrix-text">代理订阅中心 v0.1</div>
+    <div class="matrix-text">代理订阅中心 v1.1</div>
     <div class="container">
         <div class="header">
             <h1 class="title">代理订阅中心</h1>
